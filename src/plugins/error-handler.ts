@@ -131,7 +131,7 @@ export default fp(async function errorHandlerPlugin(app: FastifyInstance) {
     }
 
     const upstreamStatus =
-      (err as Record<string, unknown>).response && typeof (err as any).response === "object"
+      (err as unknown as Record<string, unknown>).response && typeof (err as any).response === "object"
         ? (err as any).response.status
         : (err as any).statusCode ?? (err as any).status;
 

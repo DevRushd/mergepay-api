@@ -132,7 +132,7 @@ function normalizeResultCodes(resultCodes: unknown): string[] {
 
 function extractResponse(
   error: unknown
-): { status?: number; extras?: { result_codes?: any } } | null {
+): { status?: number; extras?: { result_codes?: any }; result_codes?: any } | null {
   if (!error || typeof error !== "object") return null;
   const e = error as any;
   // Horizon SDK wraps errors in e.response.data
