@@ -326,7 +326,7 @@ describe("POST /groups/:groupId/treasury/proposals", () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe("VALIDATION_ERROR");
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
   });
 
   it("returns 400 when treasury is not enabled", async () => {
@@ -354,7 +354,7 @@ describe("POST /groups/:groupId/treasury/proposals", () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe("TREASURY_DISABLED");
+    expect(res.json().error.code).toBe("TREASURY_DISABLED");
   });
 });
 
@@ -450,7 +450,7 @@ describe("POST /groups/:groupId/treasury/proposals/:proposalId/sign", () => {
       payload: { signedXdr: "AAAA" },
     });
     expect(res.statusCode).toBe(409);
-    expect(res.json().error).toBe("ALREADY_SUBMITTED");
+    expect(res.json().error.code).toBe("ALREADY_SUBMITTED");
   });
 
   it("rejects a proposal whose XDR hashes a different transaction", async () => {
@@ -503,7 +503,7 @@ describe("POST /groups/:groupId/treasury/proposals/:proposalId/sign", () => {
       payload: { signedXdr: rogue.toXDR() },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe("XDR_MISMATCH");
+    expect(res.json().error.code).toBe("XDR_MISMATCH");
   });
 
   it("returns the proposal when the signer is a member and meets threshold", async () => {
@@ -780,7 +780,7 @@ describe("POST /groups/:groupId/treasury/proposals/:proposalId/sign", () => {
       payload: { signedXdr: signed.toXDR() },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe("XDR_MISMATCH");
+    expect(res.json().error.code).toBe("XDR_MISMATCH");
   });
 });
 
@@ -847,6 +847,6 @@ describe("GET /groups/:groupId/treasury/status", () => {
       headers: authHeader(user),
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe("TREASURY_DISABLED");
+    expect(res.json().error.code).toBe("TREASURY_DISABLED");
   });
 });

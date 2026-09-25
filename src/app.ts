@@ -31,6 +31,7 @@ import exchangeRateRoutes from "./routes/exchange-rates";
 import userGroupsRoutes from "./routes/user-groups";
 import healthRoutes from "./routes/health";
 import { getCorrelationId } from "./lib/correlation";
+import { formatErrorResponse } from "./utils/error-response";
 import { rateLimitPolicies } from "./lib/rate-limit";
 import { stellarErrorSerializer } from "./lib/stellar-serializer";
 import { reqSerializer, resSerializer } from "./lib/serializers";
@@ -38,6 +39,7 @@ import { PrismaRateLimitStore } from "./services/rate-limit-store";
 import { getReadiness } from "./services/health";
 import { installMultipartGuard } from "./lib/multipart-guard";
 import { nanoid } from "nanoid";
+import { AppError, ErrorCode } from "./lib/errors";
 
 /**
  * Global-policy key. Unlike the per-route policies (which run on `preHandler`
@@ -147,14 +149,22 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   app.addHook("onError", async (request, _reply, error) => {
-    request.log.error(
-      {
-        correlationId: getCorrelationId(request.id),
-        statusCode: (error as Error & { statusCode?: number }).statusCode ?? 500,
-        errorCode: (error as { code?: string }).code ?? "INTERNAL_ERROR",
-      },
-      "request failed"
-    );
+    const statusCode = (error as any).statusCode ?? (error as any).status ?? 500;
+    const errorCode = (error as any).code ?? "INTERNAL_ERROR";
+    const correlationId = getCorrelationId(request.id);
+
+    const level = statusCode >= 500 ? "error" : "warn";
+    const logData: Record<string, unknown> = {
+      correlationId,
+      statusCode,
+      errorCode,
+    };
+    if (level === "error") {
+      // Include the error object (and its stack) for unexpected server faults.
+      logData.err = error;
+    }
+    // @ts-ignore - pino child methods accessed dynamically
+    request.log[level](logData, "request failed");
   });
 
   // Security headers via @fastify/helmet. CSP is left permissive for a JSON API:
@@ -234,11 +244,21 @@ export async function buildApp(): Promise<FastifyInstance> {
     timeWindow: config.RATE_LIMIT_GLOBAL_WINDOW_MS,
     keyGenerator: globalRateLimitKey,
     addHeaders: { "x-ratelimit-limit": true, "x-ratelimit-remaining": true, "x-ratelimit-reset": true, "retry-after": true } as any,
-    errorResponseBuilder: (request: FastifyRequest) => ({
-      code: "RATE_LIMITED",
-      message: "Too many requests. Please retry later.",
-      requestId: request.id,
-    }),
+    errorResponseBuilder: () =>
+      // Must be a real Error (AppError), not a bare payload object:
+      // @fastify/rate-limit *throws* whatever this builder returns, and
+      // Fastify's error pipeline — the central error handler below, which
+      // stamps the requestId and the standard JSON envelope — only engages
+      // for Error instances. A bare object bypassed the handler entirely and
+      // surfaced as a 500 INTERNAL_ERROR with the 429 headers already set,
+      // which is precisely the incoherence this builder exists to avoid.
+      // (The builder's request argument is intentionally unused: the error
+      // handler owns the requestId.)
+      new AppError(
+        429,
+        ErrorCode.RATE_LIMITED,
+        "Too many requests. Please retry later."
+      ),
   });
   // Multipart limits, all explicit. Only /uploads/receipt consumes a multipart
   // body (the SEP-24 anchor flow is JSON end to end), so these bound that one
@@ -313,11 +333,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     const correlationId = getCorrelationId(req.id);
     reply.header("x-request-id", correlationId);
     reply.header("x-correlation-id", correlationId);
-    reply.code(404).send({
-      code: "NOT_FOUND",
-      message: "Route not found",
-      requestId: correlationId,
-    });
+    reply.code(404).send(formatErrorResponse("NOT_FOUND", "Route not found", correlationId));
   });
 
   await app.register(healthRoutes);
